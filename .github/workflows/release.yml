@@ -37,7 +37,7 @@ jobs:
       - name: Assemble deploy tree
         run: |
           set -eux
-          DIST="dist/db-admin-${{ steps.ver.outputs.version }}"
+          DIST="dist/php-db-admin-${{ steps.ver.outputs.version }}"
           mkdir -p "$DIST"
           cp -R app public vendor composer.json composer.lock README.md README_ja.md "$DIST/"
           mkdir -p "$DIST/cache/latte"
@@ -50,8 +50,8 @@ jobs:
         id: zip
         run: |
           cd dist
-          ZIP="db-admin-${{ steps.ver.outputs.version }}.zip"
-          zip -rq "$ZIP" "db-admin-${{ steps.ver.outputs.version }}"
+          ZIP="php-db-admin-${{ steps.ver.outputs.version }}.zip"
+          zip -rq "$ZIP" "php-db-admin-${{ steps.ver.outputs.version }}"
           echo "path=dist/$ZIP" >> "$GITHUB_OUTPUT"
           echo "name=$ZIP" >> "$GITHUB_OUTPUT"
 
