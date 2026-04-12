@@ -1,0 +1,7 @@
+vendor/
+cache/
+.git/
+*.md
+.dockerignore
+.claude
+CLAUDE.md

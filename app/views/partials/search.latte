@@ -1,0 +1,52 @@
+{* Search tab: per-column operator/value form → builds SQL and redirects to SQL Editor *}
+{var $operators = ['=', '!=', '<', '<=', '>', '>=', 'LIKE', 'LIKE %...%', 'NOT LIKE', 'IS NULL', 'IS NOT NULL']}
+
+{if $searchError}
+    <div class="alert alert-error">{$searchError}</div>
+{/if}
+
+<form method="GET" action="/db/{$currentDb|escapeUrl}/table/{$currentTable|escapeUrl}" class="search-form">
+    <input type="hidden" name="tab" value="search">
+
+    <div class="table-wrapper">
+        <table class="data search-table">
+            <thead>
+                <tr>
+                    <th style="width:25%;">Column</th>
+                    <th style="width:15%;">Type</th>
+                    <th style="width:20%;">Operator</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {foreach $columns as $col}
+                    {var $field = $col['Field']}
+                    {var $op = $searchOps[$field] ?? ''}
+                    {var $val = $searchVals[$field] ?? ''}
+                    <tr>
+                        <td class="{if $col['Key'] === 'PRI'}pk{/if}">
+                            {if $col['Key'] === 'PRI'}🔑 {/if}{$field}
+                        </td>
+                        <td style="color:#64748b;">{$col['Type']}</td>
+                        <td>
+                            <select name="op[{$field}]" class="search-op">
+                                <option value="">—</option>
+                                {foreach $operators as $o}
+                                    <option value="{$o}" {if $op === $o}selected{/if}>{$o}</option>
+                                {/foreach}
+                            </select>
+                        </td>
+                        <td>
+                            <input type="text" name="q[{$field}]" value="{$val}" class="search-val">
+                        </td>
+                    </tr>
+                {/foreach}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Build SQL &amp; Open in Editor</button>
+        <a href="/db/{$currentDb|escapeUrl}/table/{$currentTable|escapeUrl}?tab=search" class="btn btn-secondary">Reset</a>
+    </div>
+</form>

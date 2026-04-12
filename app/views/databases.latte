@@ -1,0 +1,43 @@
+{layout 'layout.latte'}
+
+{block title}Databases — db-admin{/block}
+
+{block content}
+<div class="page-header">
+    <div>
+        <h1>Databases</h1>
+        <div class="subtitle">{count($databases)} database{if count($databases) !== 1}s{/if}</div>
+    </div>
+</div>
+
+<div class="card">
+    {if empty($databases)}
+        <div class="welcome">
+            <h2>No databases found</h2>
+            <p>No databases are accessible with the current credentials.</p>
+        </div>
+    {else}
+        <div class="table-wrapper">
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th>Database</th>
+                        <th style="width:240px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {foreach $databases as $db}
+                        <tr>
+                            <td><a href="/db/{$db|escapeUrl}"><strong>{$db}</strong></a></td>
+                            <td>
+                                <a href="/db/{$db|escapeUrl}" class="btn btn-primary btn-sm">Browse</a>
+                                <a href="/db/{$db|escapeUrl}/query" class="btn btn-secondary btn-sm">SQL</a>
+                            </td>
+                        </tr>
+                    {/foreach}
+                </tbody>
+            </table>
+        </div>
+    {/if}
+</div>
+{/block}

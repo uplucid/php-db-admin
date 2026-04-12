@@ -1,0 +1,51 @@
+{layout 'layout.latte'}
+
+{block title}{$currentTable} — {$currentDb}{/block}
+
+{block content}
+<div class="page-header">
+    <div>
+        <h1>{$currentTable}</h1>
+        <div class="subtitle">
+            {if $tab === 'data'}
+                {$total} record{if $total !== 1}s{/if}
+            {elseif $tab === 'search'}
+                Build a query from column filters
+            {else}
+                {count($columns)} column{if count($columns) !== 1}s{/if}
+            {/if}
+        </div>
+    </div>
+    <div class="toolbar">
+        {if $tab === 'data'}
+            <a href="/db/{$currentDb|escapeUrl}/table/{$currentTable|escapeUrl}/create" class="btn btn-primary">+ New Record</a>
+            <a href="/db/{$currentDb|escapeUrl}/table/{$currentTable|escapeUrl}/export" class="btn btn-secondary">Export CSV</a>
+        {/if}
+    </div>
+</div>
+
+<div class="tabs">
+    <a href="/db/{$currentDb|escapeUrl}/table/{$currentTable|escapeUrl}"
+       class="{if $tab === 'data'}active{/if}">Browse</a>
+    <a href="/db/{$currentDb|escapeUrl}/table/{$currentTable|escapeUrl}?tab=schema"
+       class="{if $tab === 'schema'}active{/if}">Structure</a>
+    <a href="/db/{$currentDb|escapeUrl}/table/{$currentTable|escapeUrl}?tab=search"
+       class="{if $tab === 'search'}active{/if}">Search Builder</a>
+</div>
+
+<div class="card">
+    {if $tab === 'schema'}
+        {include 'partials/schema.latte', columns: $columns}
+    {elseif $tab === 'search'}
+        {include 'partials/search.latte',
+            columns: $columns, currentDb: $currentDb, currentTable: $currentTable,
+            searchOps: $searchOps, searchVals: $searchVals,
+            searchError: $searchError}
+    {else}
+        {include 'partials/data.latte',
+            columns: $columns, rows: $rows, pk: $pk,
+            page: $page, totalPages: $totalPages, total: $total,
+            perPage: $perPage, currentDb: $currentDb, currentTable: $currentTable}
+    {/if}
+</div>
+{/block}

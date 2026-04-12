@@ -1,0 +1,275 @@
+{layout 'layout.latte'}
+
+{block title}SQL — {$currentDb}{/block}
+
+{block head}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/dracula.min.css">
+{/block}
+
+{block content}
+<div class="page-header">
+    <div>
+        <h1>SQL Editor</h1>
+        <div class="subtitle">{$currentDb}</div>
+    </div>
+</div>
+
+{if $aiEnabled}
+    <details class="ai-panel card">
+        <summary>✨ Generate SQL with AI</summary>
+        <div class="ai-body">
+            <div class="form-group">
+                <label for="aiPrompt">Describe what you want in plain language</label>
+                <textarea id="aiPrompt" rows="3" placeholder="e.g. Top 10 users with the most orders in the last 30 days"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Tables to include in context <span class="meta">(their schemas are sent to the AI)</span></label>
+                {if empty($sidebarTables)}
+                    <div class="sidebar-empty">No tables available</div>
+                {else}
+                    <div class="ai-table-checks">
+                        {foreach $sidebarTables as $t}
+                            <label class="ai-table-check">
+                                <input type="checkbox" class="ai-table-cb" value="{$t}"> {$t}
+                            </label>
+                        {/foreach}
+                    </div>
+                {/if}
+            </div>
+
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button id="aiGenerateBtn" class="btn btn-primary" onclick="generateSql()">Generate</button>
+                <span id="aiStatus" style="color:#64748b; font-size:12px;"></span>
+            </div>
+
+            <div id="aiComment" class="ai-response ai-comment" style="display:none;"></div>
+            <div id="aiQuery" class="ai-response ai-query" style="display:none;"></div>
+        </div>
+    </details>
+{else}
+    <div class="card" style="background:#f8fafc;">
+        <div style="font-weight:600; margin-bottom:6px;">✨ AI SQL generation (not configured)</div>
+        <div style="font-size:13px; color:#475569;">
+            Set the <code>OPENAI_API_KEY</code> environment variable to enable natural-language SQL generation.
+            Optionally set <code>OPENAI_BASE_URL</code> (OpenAI-compatible API endpoint) and <code>OPENAI_MODEL</code> (default: <code>gpt-4o-mini</code>).
+        </div>
+    </div>
+{/if}
+
+<div class="card">
+    <textarea id="sqlEditor">{$initialSql}</textarea>
+    <div style="margin-top:12px; display:flex; gap:8px;">
+        <button id="runBtn" class="btn btn-primary" onclick="runQuery()">Execute (Ctrl+Enter)</button>
+    </div>
+</div>
+
+<div id="resultArea"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/sql/sql.min.js"></script>
+{if $aiEnabled}
+<script src="https://cdn.jsdelivr.net/npm/marked@14.1.3/marked.min.js"></script>
+{/if}
+<script>
+const dbName = {$currentDb};
+const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+let editor;
+
+document.addEventListener('DOMContentLoaded', function() {
+    const textarea = document.getElementById('sqlEditor');
+    editor = CodeMirror.fromTextArea(textarea, {
+        mode: 'text/x-sql',
+        theme: 'dracula',
+        lineNumbers: true,
+        indentWithTabs: true,
+        autofocus: true,
+        extraKeys: {
+            'Ctrl-Enter': function() { runQuery(); },
+            'Cmd-Enter': function() { runQuery(); }
+        }
+    });
+    editor.setSize(null, 220);
+});
+
+const dangerousPatterns = /^\s*(DROP|TRUNCATE|DELETE\s+FROM)\s/i;
+
+async function runQuery() {
+    const sql = editor ? editor.getValue().trim() : document.getElementById('sqlEditor').value.trim();
+    if (!sql) return;
+
+    if (dangerousPatterns.test(sql)) {
+        if (!confirm('This is a destructive query. Are you sure you want to execute it?')) {
+            return;
+        }
+    }
+
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    btn.textContent = 'Executing...';
+
+    const resultArea = document.getElementById('resultArea');
+
+    try {
+        const formData = new FormData();
+        formData.append('sql', sql);
+
+        const res = await fetch('/db/' + encodeURIComponent(dbName) + '/query/run', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': csrfToken },
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.error) {
+            resultArea.innerHTML = '<div class="card"><div class="alert alert-error" style="margin:0; font-family:monospace; white-space:pre-wrap;">' + escapeHtml(data.error) + '</div></div>';
+            return;
+        }
+
+        if (data.type === 'select') {
+            let html = '<div class="card">';
+            html += '<h3>' + data.count + ' rows returned</h3>';
+            html += '<div class="table-wrapper"><table class="data"><thead><tr>';
+            data.columns.forEach(function(col) {
+                html += '<th>' + escapeHtml(col) + '</th>';
+            });
+            html += '</tr></thead><tbody>';
+            if (data.rows.length === 0) {
+                html += '<tr><td colspan="' + data.columns.length + '" style="text-align:center; color:#94a3b8; padding:24px;">No results.</td></tr>';
+            } else {
+                data.rows.forEach(function(row) {
+                    html += '<tr>';
+                    data.columns.forEach(function(col) {
+                        const val = row[col];
+                        if (val === null) {
+                            html += '<td><span class="null">NULL</span></td>';
+                        } else if (val && typeof val === 'object' && val.__binary) {
+                            html += '<td><span class="null">[' + escapeHtml(val.type) + ', ' + val.size + ' bytes]</span></td>';
+                        } else {
+                            const s = String(val);
+                            html += '<td title="' + escapeHtml(s) + '">' + escapeHtml(s) + '</td>';
+                        }
+                    });
+                    html += '</tr>';
+                });
+            }
+            html += '</tbody></table></div></div>';
+            resultArea.innerHTML = html;
+        } else {
+            resultArea.innerHTML = '<div class="card"><div class="alert alert-success" style="margin:0;">Query executed successfully. ' + data.affected + ' row(s) affected.</div></div>';
+        }
+    } catch (err) {
+        resultArea.innerHTML = '<div class="card"><div class="alert alert-error" style="margin:0;">Request failed: ' + escapeHtml(err.message) + '</div></div>';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Execute (Ctrl+Enter)';
+    }
+}
+
+function splitSqlFromMarkdown(md) {
+    // Match the first fenced ```sql ... ``` block (case-insensitive, optional lang).
+    const re = /```(?:sql)?\s*\n([\s\S]*?)\n```/i;
+    const m = md.match(re);
+    if (!m) return { sql: '', commentary: md };
+    const sql = m[1].trim();
+    const commentary = (md.slice(0, m.index) + md.slice(m.index + m[0].length)).trim();
+    return { sql, commentary };
+}
+
+function renderMarkdown(md) {
+    return window.marked ? marked.parse(md) : ('<pre>' + escapeHtml(md) + '</pre>');
+}
+
+async function generateSql() {
+    const promptEl = document.getElementById('aiPrompt');
+    const prompt = promptEl.value.trim();
+    const commentEl = document.getElementById('aiComment');
+    const queryEl = document.getElementById('aiQuery');
+    const status = document.getElementById('aiStatus');
+    const btn = document.getElementById('aiGenerateBtn');
+
+    if (!prompt) {
+        status.textContent = 'Please enter a prompt.';
+        return;
+    }
+
+    const tables = Array.from(document.querySelectorAll('.ai-table-cb:checked')).map(cb => cb.value);
+
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    status.textContent = '';
+    commentEl.style.display = 'none'; commentEl.innerHTML = '';
+    queryEl.style.display = 'none'; queryEl.innerHTML = '';
+
+    try {
+        const formData = new FormData();
+        formData.append('prompt', prompt);
+        tables.forEach(t => formData.append('tables[]', t));
+
+        const res = await fetch('/db/' + encodeURIComponent(dbName) + '/ai/generate', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': csrfToken },
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.error) {
+            commentEl.style.display = 'block';
+            commentEl.innerHTML = '<div class="alert alert-error" style="margin:0;">' + escapeHtml(data.error) + '</div>';
+            return;
+        }
+
+        const md = data.markdown || '';
+        const { sql, commentary } = splitSqlFromMarkdown(md);
+
+        if (commentary) {
+            commentEl.style.display = 'block';
+            commentEl.innerHTML = '<div class="ai-response-label">AI commentary</div>' + renderMarkdown(commentary);
+        }
+
+        if (sql) {
+            queryEl.style.display = 'block';
+            const header = document.createElement('div');
+            header.className = 'ai-response-label';
+            header.textContent = 'Suggested query';
+            const pre = document.createElement('pre');
+            const code = document.createElement('code');
+            code.textContent = sql;
+            pre.appendChild(code);
+
+            const actions = document.createElement('div');
+            actions.className = 'ai-query-actions';
+            const insertBtn = document.createElement('button');
+            insertBtn.className = 'btn btn-primary btn-sm';
+            insertBtn.textContent = 'Insert into editor';
+            insertBtn.onclick = () => {
+                if (editor) editor.setValue(sql);
+                queryEl.style.display = 'none';
+                queryEl.innerHTML = '';
+            };
+            actions.appendChild(insertBtn);
+
+            queryEl.appendChild(header);
+            queryEl.appendChild(pre);
+            queryEl.appendChild(actions);
+        } else if (!commentary) {
+            commentEl.style.display = 'block';
+            commentEl.innerHTML = renderMarkdown(md);
+        }
+    } catch (err) {
+        commentEl.style.display = 'block';
+        commentEl.innerHTML = '<div class="alert alert-error" style="margin:0;">Request failed: ' + escapeHtml(err.message) + '</div>';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate';
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{/block}

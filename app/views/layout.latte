@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{$csrfToken}">
+    <title>{block title}db-admin{/block}</title>
+    <link rel="stylesheet" href="/assets/app.css">
+    {block head}{/block}
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-brand">
+            <a href="/">db-admin</a>
+            {if $currentDb ?? null}
+                <span class="topbar-sep">/</span>
+                <span class="topbar-db">{$currentDb}</span>
+            {/if}
+        </div>
+        <nav class="topbar-nav">
+            <span class="topbar-driver">{$driver ?? ''|upper}</span>
+            <a href="/logout">Logout</a>
+        </nav>
+    </header>
+
+    <div class="layout">
+        <aside class="sidebar">
+            {if $driver !== 'sqlite' && !empty($allDatabases)}
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Databases</div>
+                    <ul class="sidebar-list">
+                        {foreach $allDatabases as $db}
+                            <li>
+                                <a href="/db/{$db|escapeUrl}"
+                                   class="{if ($currentDb ?? null) === $db}active{/if}">
+                                    {$db}
+                                </a>
+                            </li>
+                        {/foreach}
+                    </ul>
+                </div>
+            {/if}
+
+            {if $currentDb ?? null}
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Tables</div>
+                    {if empty($sidebarTables)}
+                        <div class="sidebar-empty">No tables</div>
+                    {else}
+                        <ul class="sidebar-list">
+                            {foreach $sidebarTables as $t}
+                                <li>
+                                    <a href="/db/{$currentDb|escapeUrl}/table/{$t|escapeUrl}"
+                                       class="{if ($currentTable ?? null) === $t}active{/if}">
+                                        <span class="icon">▸</span> {$t}
+                                    </a>
+                                </li>
+                            {/foreach}
+                        </ul>
+                    {/if}
+                </div>
+
+                <div class="sidebar-section">
+                    <ul class="sidebar-list">
+                        <li>
+                            <a href="/db/{$currentDb|escapeUrl}/query"
+                               class="{if ($currentPage ?? null) === 'query'}active{/if}">
+                                <span class="icon">»</span> SQL Editor
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            {/if}
+        </aside>
+
+        <main class="main">
+            {block content}{/block}
+        </main>
+    </div>
+</body>
+</html>

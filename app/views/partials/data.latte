@@ -1,0 +1,70 @@
+{* Data tab: record list with pagination *}
+<div class="table-wrapper">
+    <table class="data">
+        <thead>
+            <tr>
+                {foreach $columns as $col}
+                    <th>
+                        {if $col['Key'] === 'PRI'}🔑 {/if}{$col['Field']}
+                    </th>
+                {/foreach}
+                {if $pk}<th style="width:150px;">Actions</th>{/if}
+            </tr>
+        </thead>
+        <tbody>
+            {if empty($rows)}
+                <tr>
+                    <td colspan="{count($columns) + ($pk ? 1 : 0)}" style="text-align:center; color:#94a3b8; padding:24px;">
+                        No records.
+                    </td>
+                </tr>
+            {else}
+                {foreach $rows as $row}
+                    <tr>
+                        {foreach $columns as $col}
+                            {var $isBinary = preg_match('/blob|binary|bytea/i', $col['Type'])}
+                            <td class="{if $col['Key'] === 'PRI'}pk{/if}">
+                                {var $val = $row[$col['Field']] ?? null}
+                                {if $val === null}
+                                    <span class="null">NULL</span>
+                                {elseif $isBinary}
+                                    <span class="null">[{$col['Type']}, {strlen((string) $val)} bytes]</span>
+                                {else}
+                                    {((string) $val)|truncate:100}
+                                {/if}
+                            </td>
+                        {/foreach}
+                        {if $pk}
+                            <td>
+                                <a href="/db/{$currentDb|escapeUrl}/table/{$currentTable|escapeUrl}/edit/{((string) $row[$pk])|escapeUrl}"
+                                   class="btn btn-primary btn-sm">Edit</a>
+                                <form method="POST"
+                                      action="/db/{$currentDb|escapeUrl}/table/{$currentTable|escapeUrl}/delete/{((string) $row[$pk])|escapeUrl}"
+                                      style="display:inline;"
+                                      onsubmit="return confirm('Delete this record?');">
+                                    <input type="hidden" name="csrf_token" value="{$csrfToken}">
+                                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                                </form>
+                            </td>
+                        {/if}
+                    </tr>
+                {/foreach}
+            {/if}
+        </tbody>
+    </table>
+</div>
+
+{if $totalPages > 1}
+    {var $qs = array_diff_key($_GET, ['page' => true])}
+    {var $base = http_build_query($qs)}
+    {var $sep = $base === '' ? '?' : '?' . $base . '&'}
+    <div class="pagination">
+        {if $page > 0}
+            <a href="{$sep}page={$page - 1}" class="btn btn-secondary btn-sm">← Prev</a>
+        {/if}
+        <span>Page {$page + 1} / {$totalPages}</span>
+        {if $page < $totalPages - 1}
+            <a href="{$sep}page={$page + 1}" class="btn btn-secondary btn-sm">Next →</a>
+        {/if}
+    </div>
+{/if}

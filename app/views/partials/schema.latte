@@ -1,0 +1,37 @@
+{* Schema tab: column definitions *}
+<div class="table-wrapper">
+    <table class="data">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Column</th>
+                <th>Type</th>
+                <th>Null</th>
+                <th>Key</th>
+                <th>Default</th>
+                <th>Extra</th>
+            </tr>
+        </thead>
+        <tbody>
+            {foreach $columns as $i => $col}
+                <tr>
+                    <td>{$i + 1}</td>
+                    <td class="{if $col['Key'] === 'PRI'}pk{/if}">
+                        {if $col['Key'] === 'PRI'}🔑 {/if}<strong>{$col['Field']}</strong>
+                    </td>
+                    <td><code>{$col['Type']}</code></td>
+                    <td>{$col['Null']}</td>
+                    <td>{$col['Key']}</td>
+                    <td>
+                        {if $col['Default'] === null}
+                            <span class="null">NULL</span>
+                        {else}
+                            <code>{$col['Default']}</code>
+                        {/if}
+                    </td>
+                    <td>{$col['Extra']}</td>
+                </tr>
+            {/foreach}
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,5 @@
+# Minimal front-controller rewrite.
+# Requires only mod_rewrite, which is available on virtually every PHP host.
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [L,QSA]

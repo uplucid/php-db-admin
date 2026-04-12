@@ -1,0 +1,61 @@
+{layout 'layout.latte'}
+
+{block title}{$mode === 'edit' ? 'Edit' : 'New'} — {$currentTable}{/block}
+
+{block content}
+{var $heading = $mode === 'edit' ? 'Edit Record' : 'New Record'}
+{var $action = $mode === 'edit'
+    ? '/db/' . rawurlencode($currentDb) . '/table/' . rawurlencode($currentTable) . '/update/' . rawurlencode($pkValue ?? '')
+    : '/db/' . rawurlencode($currentDb) . '/table/' . rawurlencode($currentTable) . '/store'}
+
+<div class="page-header">
+    <div>
+        <h1>{$heading}</h1>
+        <div class="subtitle">Table: <strong>{$currentTable}</strong></div>
+    </div>
+</div>
+
+<div class="card" style="max-width: 720px;">
+    <form method="POST" action="{$action}">
+        <input type="hidden" name="csrf_token" value="{$csrfToken}">
+        {foreach $columns as $col}
+            {var $field = $col['Field']}
+            {var $isAutoIncrement = stripos($col['Extra'], 'auto_increment') !== false}
+            {var $isPrimaryKey = $col['Key'] === 'PRI'}
+            {var $inputType = App\services\FormHelper::inputTypeForColumn($col['Type'])}
+            {var $currentValue = $row[$field] ?? $col['Default'] ?? ''}
+            {var $isNullable = $col['Null'] === 'YES'}
+            {var $readonly = ($mode === 'edit' && $isPrimaryKey)}
+
+            {if !($mode !== 'edit' && $isAutoIncrement)}
+                <div class="form-group">
+                    <label>
+                        {$field}
+                        <span class="meta">
+                            ({$col['Type']}{if $isNullable}, nullable{/if}{if $isAutoIncrement}, auto{/if})
+                        </span>
+                    </label>
+
+                    {if $readonly}
+                        <input type="text" value="{$currentValue}" readonly>
+                    {elseif $inputType === 'textarea'}
+                        <textarea name="col[{$field}]" rows="4">{$currentValue}</textarea>
+                    {else}
+                        <input type="{$inputType}"
+                               name="col[{$field}]"
+                               value="{$currentValue}"
+                               n:attr="step: $inputType === 'number' ? 'any' : null">
+                    {/if}
+                </div>
+            {/if}
+        {/foreach}
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+                {$mode === 'edit' ? 'Update' : 'Create'}
+            </button>
+            <a href="/db/{$currentDb|escapeUrl}/table/{$currentTable|escapeUrl}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{/block}

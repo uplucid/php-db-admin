@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+
+      - name: Install production dependencies
+        run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Assemble deploy tree
+        run: |
+          set -eux
+          DIST="dist/db-admin-${{ steps.ver.outputs.version }}"
+          mkdir -p "$DIST"
+          cp -R app public vendor composer.json composer.lock README.md README_ja.md "$DIST/"
+          mkdir -p "$DIST/cache/latte"
+          touch "$DIST/cache/latte/.gitkeep"
+          # Rental-host: copy config.example.php → config.php after upload.
+          cp config.example.php "$DIST/config.example.php"
+          cp .env.example       "$DIST/.env.example"
+
+      - name: Create zip
+        id: zip
+        run: |
+          cd dist
+          ZIP="db-admin-${{ steps.ver.outputs.version }}.zip"
+          zip -rq "$ZIP" "db-admin-${{ steps.ver.outputs.version }}"
+          echo "path=dist/$ZIP" >> "$GITHUB_OUTPUT"
+          echo "name=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact (non-tag runs)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.zip.outputs.name }}
+          path: ${{ steps.zip.outputs.path }}
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.zip.outputs.path }}
+          generate_release_notes: true

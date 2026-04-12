@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./app:/app/app
+      - ./public:/app/public
+      - ./cache:/app/cache
+    # Create a local .env from .env.example (see README).
+    # Compose loads the file if present; missing is fine.
+    env_file:
+      - path: .env
+        required: false

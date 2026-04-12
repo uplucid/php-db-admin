@@ -1,0 +1,12 @@
+/vendor/
+/cache/latte/*
+!/cache/latte/.gitkeep
+
+# Secrets / local config
+.env
+/config.php
+
+CLAUDE.md
+.claude
+
+.DS_Store

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — db-admin</title>
+    <link rel="stylesheet" href="/assets/app.css">
+    <style>
+        body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 420px;
+            max-width: 95vw;
+        }
+        .login-card h1 { font-size: 24px; color: #0f172a; margin-bottom: 8px; }
+        .login-card p.desc { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+        .form-row { display: flex; gap: 12px; }
+        .form-row .form-group { flex: 1; }
+        .btn-login {
+            width: 100%;
+            padding: 10px;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        .btn-login:hover { background: #1d4ed8; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>db-admin</h1>
+        <p class="desc">Connect to your database</p>
+
+        {if $error}
+            <div class="alert alert-error">{$error}</div>
+        {/if}
+
+        <form method="POST" action="/auth" id="loginForm">
+            <input type="hidden" name="csrf_token" value="{$csrfToken}">
+            <div class="form-group">
+                <label for="driver">Driver</label>
+                <select name="driver" id="driver">
+                    <option value="mysql" n:attr="selected: $envConfig['driver'] === 'mysql'">MySQL</option>
+                    <option value="pgsql" n:attr="selected: $envConfig['driver'] === 'pgsql'">PostgreSQL</option>
+                    <option value="sqlite" n:attr="selected: $envConfig['driver'] === 'sqlite'">SQLite</option>
+                </select>
+            </div>
+
+            <div id="serverFields">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="host">Host</label>
+                        <input type="text" name="host" id="host" value="{$envConfig['host'] ?: 'localhost'}" placeholder="localhost">
+                    </div>
+                    <div class="form-group" style="max-width:100px;">
+                        <label for="port">Port</label>
+                        <input type="text" name="port" id="port" value="{$envConfig['port'] ?: '3306'}" placeholder="3306">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="user">User</label>
+                    <input type="text" name="user" id="user" value="{$envConfig['user']}" placeholder="root">
+                </div>
+
+                <div class="form-group">
+                    <label for="pass">Password</label>
+                    <input type="password" name="pass" id="pass" value="{$envConfig['password']}">
+                </div>
+
+                <div class="form-group">
+                    <label for="dbname">Database (optional)</label>
+                    <input type="text" name="dbname" id="dbname" value="{$envConfig['name']}" placeholder="Leave empty to see all databases">
+                </div>
+            </div>
+
+            <div id="sqliteFields" class="hidden">
+                <div class="form-group">
+                    <label for="path">Database File Path</label>
+                    <input type="text" name="path" id="path" value="{$envConfig['path']}" placeholder="/path/to/database.sqlite">
+                </div>
+            </div>
+
+            <button type="submit" class="btn-login">Connect</button>
+        </form>
+    </div>
+
+    <script>
+        const driverSelect = document.getElementById('driver');
+        const serverFields = document.getElementById('serverFields');
+        const sqliteFields = document.getElementById('sqliteFields');
+        const portInput = document.getElementById('port');
+
+        function toggleFields() {
+            const driver = driverSelect.value;
+            if (driver === 'sqlite') {
+                serverFields.classList.add('hidden');
+                sqliteFields.classList.remove('hidden');
+            } else {
+                serverFields.classList.remove('hidden');
+                sqliteFields.classList.add('hidden');
+                if (!portInput.value || portInput.value === '3306' || portInput.value === '5432') {
+                    portInput.value = driver === 'mysql' ? '3306' : '5432';
+                }
+            }
+        }
+
+        driverSelect.addEventListener('change', toggleFields);
+        toggleFields();
+    </script>
+</body>
+</html>
