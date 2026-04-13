@@ -18,60 +18,39 @@ Built on FlightPHP v3 + Latte, served by the PHP built-in server in an Alpine Do
 - **AI SQL generation (optional)**: describe a query in natural language and get a SQL candidate (requires `OPENAI_API_KEY`)
 - **Security**: PDO prepared statements, table-name whitelist validation, Latte auto-escaping, per-session CSRF tokens on every POST
 
-## Requirements
-
-- Docker / Docker Compose
-- A web browser (`http://localhost:8080`)
-
 ## Quick start
 
-```bash
-# Prepare the env file (.env is gitignored)
-cp .env.example .env
-
-# Build & run
-docker compose up -d --build
-
-# Open in your browser
-open http://localhost:8080
-```
-
-At the login screen, pick a driver (MySQL / PostgreSQL / SQLite) and enter the connection details.
-
-### Prefilling the login form via env vars
-
-Values in `.env` are passed to PHP through the `env_file` directive in `docker-compose.yml` and used to prefill the login form:
-
-```env
-DB_DRIVER=mysql
-DB_HOST=db-server
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=secret
-DB_NAME=mydb
-DB_PATH=/path/to/sqlite.db   # SQLite only
-
-# AI SQL generation (optional)
-OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=
-OPENAI_MODEL=gpt-4o-mini
-```
-
-## Running via the prebuilt Docker image (GHCR)
-
-Every push to `main` and every `v*` tag publishes an image to GitHub Container Registry. If you have Docker, this is the fastest way to run the app anywhere:
+The fastest way to run the app is the prebuilt image on GitHub Container Registry:
 
 ```bash
-docker run --rm -p 8080:8080 \
-  -e OPENAI_API_KEY=sk-...          \
-  ghcr.io/uplucid/php-db-admin:latest
+docker run --rm -p 8080:8080 ghcr.io/uplucid/php-db-admin:latest
 ```
+
+Then open <http://localhost:8080> and enter your database connection details on the login screen.
 
 Available tags:
 - `latest` — tip of `main`
 - `vX.Y.Z` / `X.Y` — tagged releases
 
-For persistent Latte cache you can mount a volume on `/app/cache`:
+### Prefilling the login form via env vars
+
+Pass any of these variables and they will prefill the login form:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e DB_DRIVER=mysql \
+  -e DB_HOST=db-server \
+  -e DB_PORT=3306 \
+  -e DB_USER=root \
+  -e DB_PASSWORD=secret \
+  -e DB_NAME=mydb \
+  -e OPENAI_API_KEY=sk-... \
+  ghcr.io/uplucid/php-db-admin:latest
+```
+
+For larger setups, use `--env-file` pointing at a local `.env` (copy `.env.example` from the repo as a starting point).
+
+### Persistent Latte cache (optional)
 
 ```bash
 docker run --rm -p 8080:8080 \
@@ -148,15 +127,15 @@ Keep the application code **outside** the web root and point the (sub)domain's d
 ## Directory layout
 
 ```
-db-admin/
+php-db-admin/
 ├── Dockerfile              # multi-stage build (php:8.4-cli-alpine)
 ├── docker-compose.yml
 ├── composer.json           # flightphp/core + latte/latte
-├── .htaccess               # shared-hosting routing + deny rules
 ├── .env.example            # copy to .env for Docker
 ├── config.example.php      # copy to config.php for shared hosting
 ├── public/
 │   ├── index.php           # routes + Latte registration + CSRF guard
+│   ├── .htaccess           # 3-line front-controller rewrite
 │   ├── router.php          # router for the PHP built-in server
 │   └── assets/app.css
 └── app/
@@ -207,9 +186,23 @@ db-admin/
 | POST | `/db/{db}/ai/generate` | AI SQL generation (JSON API) |
 | POST | `/db/{db}/ai/ask` | AI DB Q&A (JSON API) |
 
-## Development
+## Development (building from source)
 
-### Hot reload
+Clone the repo and use Docker Compose to build and run locally with hot reload:
+
+```bash
+git clone https://github.com/uplucid/php-db-admin.git
+cd php-db-admin
+
+# Optional: prepare a .env (gitignored) to prefill the login form
+cp .env.example .env
+
+# Build & run
+docker compose up -d --build
+
+open http://localhost:8080
+```
+
 `./app`, `./public`, and `./cache` are bind-mounted in `docker-compose.yml`, so source changes are picked up without restarting the container (Latte's `setAutoRefresh(true)` is also on).
 
 ### Installing vendor/ on the host (for IDE completion)
@@ -226,7 +219,10 @@ docker compose logs -f app
 
 ## Releases
 
-Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which runs `composer install --no-dev --optimize-autoloader`, bundles a deployment zip, and attaches it to the GitHub Release.
+Pushing a `v*` tag triggers two workflows:
+
+- [`.github/workflows/release.yml`](.github/workflows/release.yml) runs `composer install --no-dev --optimize-autoloader`, bundles a deployment zip, and attaches it to the GitHub Release.
+- [`.github/workflows/docker.yml`](.github/workflows/docker.yml) builds and pushes a multi-tag image (`vX.Y.Z`, `X.Y`, `latest`) to `ghcr.io/uplucid/php-db-admin`.
 
 ## Out of scope
 
