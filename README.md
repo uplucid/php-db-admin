@@ -57,32 +57,60 @@ OPENAI_BASE_URL=
 OPENAI_MODEL=gpt-4o-mini
 ```
 
+## Running via the prebuilt Docker image (GHCR)
+
+Every push to `main` and every `v*` tag publishes an image to GitHub Container Registry. If you have Docker, this is the fastest way to run the app anywhere:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e OPENAI_API_KEY=sk-...          \
+  ghcr.io/uplucid/php-db-admin:latest
+```
+
+Available tags:
+- `latest` — tip of `main`
+- `vX.Y.Z` / `X.Y` — tagged releases
+
+For persistent Latte cache you can mount a volume on `/app/cache`:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v phpdbadmin-cache:/app/cache \
+  ghcr.io/uplucid/php-db-admin:latest
+```
+
 ## Deploying to a shared-hosting rental server
 
-Two layouts are supported. **Mode A is strongly recommended** because it keeps application code physically out of the web root, and the required `.htaccess` is only three lines.
+> [!IMPORTANT]
+> **The app must be mounted at the root of a (sub)domain, not at a subpath.** The templates and client-side JS use absolute-from-root URLs (`/db/...`, `fetch('/ai/...')`) for simplicity and zero-config local development. Mounting under a subpath like `https://example.com/phpdbadmin/` will break navigation and cause redirect loops.
+>
+> Use a dedicated (sub)domain such as `dbadmin.example.com` pointing at this app.
 
-### Mode A — keep app code out of the web root (recommended)
+### Layout
+
+Keep the application code **outside** the web root and point the (sub)domain's document root at a small directory that only contains `index.php`, `.htaccess`, and `assets/`:
 
 ```
 <home>/
-├── phpdbadmin/             ← NOT web-accessible (above or beside the web root)
+├── phpdbadmin/             ← NOT web-accessible
 │   ├── app/
 │   ├── vendor/
 │   ├── cache/
 │   ├── composer.json
 │   └── config.php          ← your filled-in copy of config.example.php
 │
-└── public_html/            ← web root
+└── dbadmin.example.com/    ← document root of the subdomain
     ├── index.php           ← copied from phpdbadmin/public/index.php, one line edited
     ├── .htaccess           ← copied from phpdbadmin/public/.htaccess (3 lines)
     └── assets/             ← copied from phpdbadmin/public/assets/
 ```
 
-Steps:
+### Steps
 
-1. Download `php-db-admin-vX.Y.Z.zip` from GitHub Releases and extract it somewhere **outside** the web root, e.g. `~/phpdbadmin/`.
-2. Copy `phpdbadmin/public/index.php`, `phpdbadmin/public/.htaccess`, and `phpdbadmin/public/assets/` into your web root.
-3. In the copied `index.php`, point `APP_BASE` at where you put the app. Example:
+1. Point a subdomain (e.g. `dbadmin.example.com`) at a new document-root directory in your shared-hosting control panel.
+2. Download `php-db-admin-vX.Y.Z.zip` from GitHub Releases and extract it outside the web root, e.g. `~/phpdbadmin/`.
+3. Copy `phpdbadmin/public/index.php`, `phpdbadmin/public/.htaccess`, and `phpdbadmin/public/assets/` into the subdomain's document root.
+4. In the copied `index.php`, point `APP_BASE` at where the extracted app lives:
 
    ```php
    define('APP_BASE', __DIR__ . '/../phpdbadmin');
@@ -90,44 +118,9 @@ Steps:
    // define('APP_BASE', '/home/your-user/phpdbadmin');
    ```
 
-4. Copy `config.example.php` to `phpdbadmin/config.php` and fill in DB credentials / `OPENAI_API_KEY` / etc. If your host lets you set real environment variables, you can skip this; real env vars always take precedence.
-5. Ensure `cache/latte/` (inside your app directory) is writable by the web server.
-6. Since the app's own login only checks whether DB credentials work, add an extra layer with `.htpasswd`-backed Basic auth in the web root's `.htaccess` when exposing this anywhere beyond localhost.
-
-### Mode B — everything in a subdirectory of the web root
-
-If your host won't let you place files above the web root, upload the extracted zip to e.g. `public_html/phpdbadmin/` and access it at `https://example.com/phpdbadmin/`. In this case `app/`, `vendor/`, `cache/`, and `config.php` are physically reachable via URL, so you **must** block them explicitly. Create `public_html/phpdbadmin/.htaccess` with:
-
-```apache
-# Block direct access to sensitive directories
-RedirectMatch 404 (?i)^/phpdbadmin/(?:app|vendor|cache|\.git|tests?)(?:/|$)
-
-# Block sensitive files
-<FilesMatch "(?i)(^\.|composer\.(json|lock)|\.md$|\.latte$|\.example$|^config\.php$|\.sqlite3?$|\.db$)">
-    Require all denied
-</FilesMatch>
-
-# Optional Basic auth — strongly recommended for Mode B
-# AuthType Basic
-# AuthName "db-admin"
-# AuthUserFile /absolute/path/above/docroot/.htpasswd
-# Require valid-user
-
-# Serve real files under public/ (e.g. /phpdbadmin/assets/app.css),
-# then fall back to the front controller.
-RewriteEngine On
-RewriteBase /phpdbadmin/
-
-RewriteCond %{REQUEST_URI} !^/phpdbadmin/public/
-RewriteCond %{DOCUMENT_ROOT}/phpdbadmin/public%{REQUEST_URI} -f [OR]
-RewriteCond %{DOCUMENT_ROOT}/phpdbadmin/public%{REQUEST_URI} -d
-RewriteRule ^/?(.*)$ public/$1 [L]
-
-RewriteRule ^/?$ public/index.php [L,QSA]
-RewriteRule ^/?(.*)$ public/index.php [L,QSA]
-```
-
-This requires `mod_rewrite`, `FilesMatch`, and `RedirectMatch`. If anything in this section is not supported by your host, Mode B is not safe for you — prefer Mode A.
+5. Copy `config.example.php` to `phpdbadmin/config.php` and fill in DB credentials / `OPENAI_API_KEY` / etc. If your host lets you set real environment variables, you can skip this; real env vars always take precedence over `config.php`.
+6. Ensure `cache/latte/` (inside the app directory) is writable by the web server.
+7. The app's own "login" only checks that DB credentials work — it is **not** an authentication system. Add an extra layer with `.htpasswd`-backed Basic auth in the subdomain's `.htaccess` when exposing this anywhere beyond localhost.
 
 ## Usage
 

@@ -56,32 +56,60 @@ OPENAI_BASE_URL=
 OPENAI_MODEL=gpt-5.4-mini
 ```
 
+## Dockerイメージで動かす (GHCR)
+
+`main` ブランチへの push と `v*` タグ push のたびに、GitHub Container Registry にイメージが自動公開されます。Docker が使える環境なら、これが最短の起動方法です:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e OPENAI_API_KEY=sk-...          \
+  ghcr.io/uplucid/php-db-admin:latest
+```
+
+利用可能なタグ:
+- `latest` — `main` ブランチの最新
+- `vX.Y.Z` / `X.Y` — リリースタグ
+
+Latte キャッシュを永続化したい場合は `/app/cache` にボリュームをマウント:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v phpdbadmin-cache:/app/cache \
+  ghcr.io/uplucid/php-db-admin:latest
+```
+
 ## レンタルサーバへ設置する場合
 
-2 通りのレイアウトをサポートしています。**Mode A を強く推奨**します — アプリ本体が Web ルートの外に出るため、必要な `.htaccess` はわずか 3 行で済み、共用ホストで動作しないリスクが最小になります。
+> [!IMPORTANT]
+> **このアプリは (サブ)ドメインのルートに設置する必要があります。サブパス(例: `https://example.com/phpdbadmin/`)では動きません。** テンプレートと JS 側が `/db/...` や `fetch('/ai/...')` のような絶対パスを使っているため、サブパスに置くとナビゲーションが壊れ、リダイレクトループになります。
+>
+> `dbadmin.example.com` のような専用サブドメインを用意して、そのドキュメントルートをこのアプリに向けてください。
 
-### Mode A — アプリ本体を Web ルートの外に置く（推奨）
+### レイアウト
+
+アプリ本体は Web ルートの**外**に置き、サブドメインのドキュメントルートには `index.php`・`.htaccess`・`assets/` の最小セットだけを配置します:
 
 ```
 <ホーム>/
-├── phpdbadmin/             ← Webからは見えない場所（public_html の外）
+├── phpdbadmin/             ← Webからは見えない場所
 │   ├── app/
 │   ├── vendor/
 │   ├── cache/
 │   ├── composer.json
 │   └── config.php          ← config.example.php をコピーして記入したもの
 │
-└── public_html/            ← Web ルート
+└── dbadmin.example.com/    ← サブドメインのドキュメントルート
     ├── index.php           ← phpdbadmin/public/index.php をコピーし1行だけ編集
     ├── .htaccess           ← phpdbadmin/public/.htaccess をコピー（3行）
     └── assets/             ← phpdbadmin/public/assets/ をコピー
 ```
 
-手順:
+### 手順
 
-1. GitHub Releases から `php-db-admin-vX.Y.Z.zip` をダウンロードして、Web ルートの**外**(例: `~/phpdbadmin/`)に展開
-2. `phpdbadmin/public/index.php`, `phpdbadmin/public/.htaccess`, `phpdbadmin/public/assets/` を Web ルートへコピー
-3. コピーした `index.php` 内の `APP_BASE` をアプリ本体のパスに書き換える:
+1. ホスティングのコントロールパネルで `dbadmin.example.com` 等のサブドメインを作成し、新しいドキュメントルートディレクトリに向ける
+2. GitHub Releases から `php-db-admin-vX.Y.Z.zip` をダウンロードして、Web ルートの外(例: `~/phpdbadmin/`)に展開
+3. `phpdbadmin/public/index.php`, `phpdbadmin/public/.htaccess`, `phpdbadmin/public/assets/` をサブドメインのドキュメントルートへコピー
+4. コピーした `index.php` 内の `APP_BASE` をアプリ本体のパスに書き換える:
 
    ```php
    define('APP_BASE', __DIR__ . '/../phpdbadmin');
@@ -89,44 +117,9 @@ OPENAI_MODEL=gpt-5.4-mini
    // define('APP_BASE', '/home/your-user/phpdbadmin');
    ```
 
-4. `config.example.php` を `phpdbadmin/config.php` としてコピーし、DB接続情報 / `OPENAI_API_KEY` 等を記入。ホストで環境変数が設定できる場合は省略可(環境変数が常に優先される)
-5. `cache/latte/` にWebサーバから書き込み権限を付与
-6. アプリ内認証は「DB接続情報の入力」だけなので、ローカル以外に公開する場合は Web ルートの `.htaccess` に `.htpasswd` ベースの Basic 認証を追加すること
-
-### Mode B — すべてを Web ルートのサブディレクトリに置く
-
-Webルート外にファイルを置けないホスト向け。zipを丸ごと `public_html/phpdbadmin/` に展開して `https://example.com/phpdbadmin/` でアクセスします。この場合 `app/` `vendor/` `cache/` `config.php` が物理的にURL経由で届くので、**明示的にブロックする必要があります**。`public_html/phpdbadmin/.htaccess` を以下で作成:
-
-```apache
-# センシティブなディレクトリへの直アクセスを拒否
-RedirectMatch 404 (?i)^/phpdbadmin/(?:app|vendor|cache|\.git|tests?)(?:/|$)
-
-# センシティブなファイル
-<FilesMatch "(?i)(^\.|composer\.(json|lock)|\.md$|\.latte$|\.example$|^config\.php$|\.sqlite3?$|\.db$)">
-    Require all denied
-</FilesMatch>
-
-# Basic 認証 (Mode B では強く推奨)
-# AuthType Basic
-# AuthName "db-admin"
-# AuthUserFile /absolute/path/above/docroot/.htpasswd
-# Require valid-user
-
-# public/ 配下の実ファイル (/phpdbadmin/assets/app.css など) を先に配信し、
-# 他は index.php にフォールバック
-RewriteEngine On
-RewriteBase /phpdbadmin/
-
-RewriteCond %{REQUEST_URI} !^/phpdbadmin/public/
-RewriteCond %{DOCUMENT_ROOT}/phpdbadmin/public%{REQUEST_URI} -f [OR]
-RewriteCond %{DOCUMENT_ROOT}/phpdbadmin/public%{REQUEST_URI} -d
-RewriteRule ^/?(.*)$ public/$1 [L]
-
-RewriteRule ^/?$ public/index.php [L,QSA]
-RewriteRule ^/?(.*)$ public/index.php [L,QSA]
-```
-
-`mod_rewrite` に加えて `FilesMatch` / `RedirectMatch` が効くことが前提です。**どれか一つでも動かないホストでは Mode B は安全ではない**ので、Mode A を使ってください。
+5. `config.example.php` を `phpdbadmin/config.php` としてコピーし、DB接続情報 / `OPENAI_API_KEY` 等を記入。ホストで環境変数が設定できる場合は省略可(環境変数が常に優先される)
+6. `cache/latte/` にWebサーバから書き込み権限を付与
+7. アプリ内「ログイン」は「DB接続情報が通るか」の確認だけで、認証機構ではありません。ローカル以外に公開する場合はサブドメインの `.htaccess` に `.htpasswd` ベースの Basic 認証を追加して二重保護してください
 
 ## 使い方
 
