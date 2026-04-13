@@ -15,9 +15,15 @@ class DB
     public static function connect(array $cfg): void
     {
         $driver = $cfg['driver'] ?? '';
+        $name = $cfg['name'] ?? '';
         $dsn = match ($driver) {
-            'mysql'  => "mysql:host={$cfg['host']};port={$cfg['port']};charset=utf8mb4",
-            'pgsql'  => "pgsql:host={$cfg['host']};port={$cfg['port']}",
+            'mysql'  => "mysql:host={$cfg['host']};port={$cfg['port']};charset=utf8mb4"
+                        . ($name !== '' ? ";dbname={$name}" : ''),
+            // libpq falls back to the username as the dbname when dbname is absent,
+            // which breaks managed services like Supabase where the user is not a database.
+            // Always send an explicit dbname (Postgres' conventional default is `postgres`).
+            'pgsql'  => "pgsql:host={$cfg['host']};port={$cfg['port']};dbname="
+                        . ($name !== '' ? $name : 'postgres'),
             'sqlite' => "sqlite:{$cfg['path']}",
             default  => throw new InvalidArgumentException("Unsupported driver: {$driver}")
         };

@@ -19,6 +19,13 @@ class AuthController
             'path'     => $_ENV['DB_PATH'] ?? '',
         ];
 
+        // Rehydrate the form from the last failed submission (one-shot).
+        $lastAttempt = $_SESSION['login_last_attempt'] ?? null;
+        unset($_SESSION['login_last_attempt']);
+        if (is_array($lastAttempt)) {
+            $envConfig = array_merge($envConfig, $lastAttempt);
+        }
+
         $error = $_SESSION['login_error'] ?? '';
         unset($_SESSION['login_error']);
 
@@ -39,8 +46,19 @@ class AuthController
         $dbname = $_POST['dbname'] ?? '';
         $path   = $_POST['path'] ?? '';
 
+        $submitted = [
+            'driver'   => $driver,
+            'host'     => $host,
+            'port'     => $port,
+            'user'     => $user,
+            'password' => $pass,
+            'name'     => $dbname,
+            'path'     => $path,
+        ];
+
         if (!in_array($driver, ['mysql', 'pgsql', 'sqlite'], true)) {
             $_SESSION['login_error'] = 'Invalid driver selected.';
+            $_SESSION['login_last_attempt'] = $submitted;
             \Flight::redirect('/');
             return;
         }
@@ -51,16 +69,12 @@ class AuthController
             'port'   => $port ?: ($driver === 'mysql' ? '3306' : '5432'),
             'user'   => $user,
             'pass'   => $pass,
+            'name'   => $dbname,
             'path'   => $path,
         ];
 
         try {
             DB::connect($cfg);
-
-            if ($driver !== 'sqlite' && $dbname !== '') {
-                DB::useDatabase($dbname);
-            }
-
             DB::disconnect();
 
             session_regenerate_id(true);
@@ -76,6 +90,7 @@ class AuthController
             }
         } catch (\PDOException $e) {
             $_SESSION['login_error'] = 'Connection failed: ' . $e->getMessage();
+            $_SESSION['login_last_attempt'] = $submitted;
             \Flight::redirect('/');
         }
     }
